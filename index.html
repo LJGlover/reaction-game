@@ -1,0 +1,732 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zoo Builder | 3D Reaction Timer</title>
+    <!-- Imports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            /* Design System Colors */
+            --bg-color: #0F172A;
+            --surface-color: #1E293B;
+            --text-primary: #F1F5F9;
+            --text-secondary: #94A3B8;
+            --accent-ready: #10B981;
+            --accent-waiting: #F59E0B;
+            --accent-result: #3B82F6;
+            --accent-error: #EF4444;
+            
+            /* Typography */
+            --font-headings: 'Poppins', sans-serif;
+            --font-body: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Layout */
+        .app-container {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--surface-color);
+        }
+
+        h1 {
+            font-family: var(--font-headings);
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .stat-value {
+            color: var(--text-primary);
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        /* Main Game Area */
+        .game-area {
+            position: relative;
+            background: var(--surface-color);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-areas: 'left center right';
+            gap: 1rem;
+            align-items: stretch;
+            padding: 1rem;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .canvas-wrapper {
+            grid-area: center;
+            position: relative;
+            min-height: 340px;
+            height: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .ui-side {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .ui-left { grid-area: left; }
+        .ui-right { grid-area: right; }
+
+        /* Interactive Zone (Overlay for clicks) */
+        #click-zone {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            cursor: pointer;
+            display: none;
+        }
+
+        /* Status Indicators */
+        .status-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+            transition: transform 0.2s;
+        }
+
+        .status-idle { background: var(--surface-color); border: 1px solid var(--text-secondary); color: var(--text-secondary); }
+        .status-waiting { background: var(--accent-waiting); color: #000; box-shadow: 0 0 15px rgba(245, 158, 11, 0.4); }
+        .status-now { background: var(--accent-ready); color: #000; box-shadow: 0 0 20px rgba(16, 185, 129, 0.6); transform: scale(1.1); }
+        .status-result { background: var(--accent-result); color: #fff; }
+        .status-error { background: var(--accent-error); color: #fff; }
+
+        .main-message {
+            font-family: var(--font-headings);
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .sub-message {
+            color: var(--text-secondary);
+            font-size: 1rem;
+            max-width: 400px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        /* Controls */
+        .controls {
+            margin-top: 2rem;
+            pointer-events: auto;
+        }
+
+        button {
+            background: var(--accent-result);
+            color: white;
+            border: none;
+            padding: 12px 32px;
+            border-radius: 8px;
+            font-family: var(--font-headings);
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.secondary {
+            background: transparent;
+            border: 1px solid var(--text-secondary);
+            color: var(--text-secondary);
+            margin-top: 1rem;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+        }
+
+        /* Zoo Gallery */
+        .zoo-panel {
+            background: var(--surface-color);
+            border-radius: 12px;
+            padding: 1rem;
+            min-height: 100px;
+        }
+
+        .zoo-header {
+            font-family: var(--font-headings);
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .zoo-grid {
+            display: flex;
+            gap: 0.5rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+        }
+
+        .zoo-item {
+            min-width: 60px;
+            height: 60px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .zoo-item:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .zoo-item.new {
+            border-color: var(--accent-ready);
+            animation: pulse-border 1s infinite;
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: var(--accent-ready); }
+            50% { border-color: transparent; }
+            100% { border-color: var(--accent-ready); }
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 600px) {
+            .stats-bar { display: none; }
+            .main-message { font-size: 1.8rem; }
+            .game-area {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr auto;
+                grid-template-areas: 'left' 'center' 'right';
+            }
+            .ui-side { align-items: center; text-align: center; }
+            .sub-message { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <h1>🦁 Zoo Builder</h1>
+            <div class="stats-bar">
+                <div>Animals: <span id="stat-count" class="stat-value">0</span></div>
+                <div>Avg: <span id="stat-avg" class="stat-value">-- ms</span></div>
+                <div>Best: <span id="stat-best" class="stat-value">-- ms</span></div>
+            </div>
+        </header>
+
+        <!-- Main Game Box -->
+        <div class="game-area">
+            <div class="ui-side ui-left" id="ui-layer-left">
+                <div class="status-badge status-idle" id="status-badge">Ready to Start</div>
+                <div class="main-message" id="main-text">Build Your Zoo</div>
+                <div class="controls" id="start-controls">
+                    <button onclick="game.startRoutine()">Start Game</button>
+                </div>
+            </div>
+
+            <div class="canvas-wrapper">
+                <div id="canvas-container"></div>
+                <div id="click-zone"></div>
+            </div>
+
+            <div class="ui-side ui-right" id="ui-layer-right">
+                <div class="sub-message" id="sub-text">Animals will cycle rapidly. Click anywhere immediately when they STOP on a new animal.</div>
+                <div class="controls" id="reset-controls" style="display:none;">
+                    <button onclick="game.resetRoutine()">Try Again</button>
+                    <br>
+                    <button class="secondary" onclick="game.resetSession()">Clear Zoo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Zoo Collection footer -->
+        <div class="zoo-panel">
+            <div class="zoo-header">
+                <span>My Collection</span>
+                <span style="font-size: 0.8rem; color: var(--text-secondary)">Latest captured animals appear here</span>
+            </div>
+            <div class="zoo-grid" id="zoo-grid">
+                <!-- Items injected here -->
+                <div class="zoo-item" style="opacity: 0.3; font-size: 0.8rem;">Empty</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        /**
+         * 3D SCENE MANAGER
+         * Handles Three.js setup, animal generation, and rendering loop.
+         */
+        class SceneManager {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(45, this.container.clientWidth / this.container.clientHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                
+                this.init();
+                this.animals = [];
+                this.currentAnimal = null;
+                this.animationFrameId = null;
+                this.isRotating = true;
+            }
+
+            init() {
+                // Renderer Setup
+                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.container.appendChild(this.renderer.domElement);
+
+                // Camera
+                this.camera.position.set(0, 2, 6);
+                this.camera.lookAt(0, 0, 0);
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                dirLight.position.set(5, 10, 7);
+                this.scene.add(dirLight);
+
+                const rimLight = new THREE.DirectionalLight(0x3B82F6, 0.5); // Blue rim light
+                rimLight.position.set(-5, 5, -5);
+                this.scene.add(rimLight);
+
+                // Handle Resize
+                window.addEventListener('resize', () => this.onResize());
+            }
+
+            onResize() {
+                if (!this.container) return;
+                this.camera.aspect = this.container.clientWidth / this.container.clientHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+            }
+
+            // Procedural Animal Generator (Block Style)
+            createAnimal(type) {
+                const group = new THREE.Group();
+                const material = new THREE.MeshStandardMaterial({ 
+                    flatShading: true, 
+                    roughness: 0.3,
+                    metalness: 0.1
+                });
+
+                // Base Body
+                let bodyGeo, headGeo;
+                let color;
+
+                switch(type) {
+                    case 'LION':
+                        color = 0xF59E0B; // Gold
+                        bodyGeo = new THREE.BoxGeometry(1.2, 0.8, 1.8);
+                        headGeo = new THREE.BoxGeometry(1, 1, 1);
+                        // Mane
+                        const mane = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.2, 0.8), new THREE.MeshStandardMaterial({ color: 0x8B5CF6 }));
+                        mane.position.set(0, 0.8, 0.9);
+                        group.add(mane);
+                        break;
+                    case 'ELEPHANT':
+                        color = 0x94A3B8; // Grey
+                        bodyGeo = new THREE.BoxGeometry(1.5, 1.2, 2);
+                        headGeo = new THREE.BoxGeometry(1.2, 1, 1);
+                        // Trunk
+                        const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.5, 0.3), material);
+                        trunk.position.set(0, 0.2, 1.8);
+                        trunk.rotation.x = 0.5;
+                        group.add(trunk);
+                        break;
+                    case 'ZEBRA':
+                        color = 0xF1F5F9; // Whiteish
+                        bodyGeo = new THREE.BoxGeometry(1, 1, 1.8);
+                        headGeo = new THREE.BoxGeometry(0.6, 0.8, 1.2);
+                        // "Stripes" - purely abstract via wireframe or secondary blocks for simplicity
+                        break;
+                    case 'GIRAFFE':
+                        color = 0xFCD34D;
+                        bodyGeo = new THREE.BoxGeometry(1, 1, 1.5);
+                        headGeo = new THREE.BoxGeometry(0.6, 0.8, 0.6);
+                        // Neck
+                        const neck = new THREE.Mesh(new THREE.BoxGeometry(0.4, 2.5, 0.4), material);
+                        neck.position.set(0, 1.5, 0.8);
+                        group.add(neck);
+                        headGeo.translate(0, 2.8, 1); // Move head high
+                        break;
+                    default: // HIPPO
+                        color = 0x8B5CF6; 
+                        bodyGeo = new THREE.BoxGeometry(1.6, 1, 2.2);
+                        headGeo = new THREE.BoxGeometry(1.2, 1, 1.5);
+                }
+
+                material.color.setHex(color);
+                
+                const body = new THREE.Mesh(bodyGeo, material);
+                body.position.y = 0.5;
+                
+                const head = new THREE.Mesh(headGeo, material);
+                if(type !== 'GIRAFFE') head.position.set(0, 1.2, 0.8); // Default head pos
+                if(type === 'ZEBRA') head.position.set(0, 1.5, 1); 
+
+                group.add(body);
+                group.add(head);
+
+                // Simple Legs
+                const legGeo = new THREE.BoxGeometry(0.3, 0.8, 0.3);
+                const legPos = [[-0.4, 0, -0.6], [0.4, 0, -0.6], [-0.4, 0, 0.6], [0.4, 0, 0.6]];
+                legPos.forEach(pos => {
+                    const leg = new THREE.Mesh(legGeo, material);
+                    leg.position.set(...pos);
+                    group.add(leg);
+                });
+
+                // Shadow
+                const shadowGeo = new THREE.CircleGeometry(1.8, 32);
+                const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2 });
+                const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+                shadow.position.y = -0.4;
+                shadow.rotation.x = -Math.PI / 2;
+                group.add(shadow);
+
+                return { mesh: group, type: type, color: color };
+            }
+
+            showAnimal(type) {
+                if (this.currentAnimal) {
+                    this.scene.remove(this.currentAnimal.mesh);
+                }
+                const newAnimal = this.createAnimal(type);
+                this.currentAnimal = newAnimal;
+                this.scene.add(newAnimal.mesh);
+                
+                // Pop animation
+                newAnimal.mesh.scale.set(0.1, 0.1, 0.1);
+                let scale = 0.1;
+                const animatePop = () => {
+                    if (scale < 1) {
+                        scale += 0.2;
+                        newAnimal.mesh.scale.set(scale, scale, scale);
+                        requestAnimationFrame(animatePop);
+                    }
+                };
+                animatePop();
+            }
+
+            clearScene() {
+                if (this.currentAnimal) {
+                    this.scene.remove(this.currentAnimal.mesh);
+                    this.currentAnimal = null;
+                }
+            }
+
+            startAnimationLoop() {
+                const loop = () => {
+                    this.animationFrameId = requestAnimationFrame(loop);
+                    if (this.currentAnimal && this.isRotating) {
+                        this.currentAnimal.mesh.rotation.y += 0.02;
+                        // Floating effect
+                        this.currentAnimal.mesh.position.y = Math.sin(Date.now() * 0.003) * 0.1;
+                    }
+                    this.renderer.render(this.scene, this.camera);
+                };
+                loop();
+            }
+
+            stopRotating() {
+                this.isRotating = false;
+                if(this.currentAnimal) this.currentAnimal.mesh.rotation.y = 0.5; // Snap to clean angle
+            }
+            
+            resumeRotating() {
+                this.isRotating = true;
+            }
+        }
+
+        /**
+         * GAME LOGIC
+         * Handles state machine, timing, and UI updates.
+         */
+        const ANIMAL_TYPES = ['LION', 'ELEPHANT', 'ZEBRA', 'GIRAFFE', 'HIPPO'];
+        const ICONS = {'LION': '🦁', 'ELEPHANT': '🐘', 'ZEBRA': '🦓', 'GIRAFFE': '🦒', 'HIPPO': '🦛'};
+        
+        class GameEngine {
+            constructor() {
+                this.scene3D = new SceneManager('canvas-container');
+                this.scene3D.startAnimationLoop();
+                
+                this.state = 'IDLE'; // IDLE, CYCLING, WAITING_FOR_INPUT, FINISHED
+                this.startTime = 0;
+                this.endTime = 0;
+                this.timeoutId = null;
+                this.intervalId = null;
+                
+                // Stats
+                this.results = [];
+                this.bestTime = Infinity;
+                
+                // DOM Elements
+                this.ui = {
+                    badge: document.getElementById('status-badge'),
+                    mainText: document.getElementById('main-text'),
+                    subText: document.getElementById('sub-text'),
+                    startBtn: document.getElementById('start-controls'),
+                    resetBtn: document.getElementById('reset-controls'),
+                    clickZone: document.getElementById('click-zone'),
+                    zooGrid: document.getElementById('zoo-grid'),
+                    statCount: document.getElementById('stat-count'),
+                    statAvg: document.getElementById('stat-avg'),
+                    statBest: document.getElementById('stat-best'),
+                };
+
+                // Bind Input
+                this.ui.clickZone.addEventListener('mousedown', (e) => this.handleInput(e));
+                this.ui.clickZone.addEventListener('touchstart', (e) => this.handleInput(e)); // Mobile support
+                
+                // Initial animal
+                this.scene3D.showAnimal('LION'); 
+            }
+
+            setState(newState) {
+                this.state = newState;
+                this.updateUI(newState);
+            }
+
+            updateUI(state) {
+                const { badge, mainText, subText, startBtn, resetBtn, clickZone } = this.ui;
+
+                switch(state) {
+                    case 'IDLE':
+                        badge.className = 'status-badge status-idle';
+                        badge.innerText = 'Ready';
+                        mainText.innerHTML = 'Build Your Zoo';
+                        mainText.style.color = 'var(--text-primary)';
+                        subText.innerText = 'Animals will cycle rapidly. Click anywhere immediately when they STOP on a new animal.';
+                        startBtn.style.display = 'block';
+                        resetBtn.style.display = 'none';
+                        clickZone.style.display = 'none';
+                        break;
+                    case 'CYCLING':
+                        badge.className = 'status-badge status-waiting';
+                        badge.innerText = 'Cycling...';
+                        mainText.innerText = 'Wait for it...';
+                        subText.innerText = 'Don\'t click yet!';
+                        startBtn.style.display = 'none';
+                        resetBtn.style.display = 'none';
+                        clickZone.style.display = 'block'; // Catch false starts
+                        break;
+                    case 'WAITING_FOR_INPUT':
+                        badge.className = 'status-badge status-now';
+                        badge.innerText = 'CLICK NOW!';
+                        mainText.innerText = 'STOPPED!';
+                        mainText.style.color = 'var(--accent-ready)';
+                        subText.innerText = 'Click to capture!';
+                        break;
+                    case 'FINISHED':
+                        startBtn.style.display = 'none';
+                        resetBtn.style.display = 'block';
+                        clickZone.style.display = 'none';
+                        break;
+                }
+            }
+
+            startRoutine() {
+                this.setState('CYCLING');
+                this.scene3D.resumeRotating();
+                
+                // Random time between 2s and 6s (slightly longer for 3D visual settle)
+                const delay = Math.floor(Math.random() * 4000) + 1000;
+                
+                // Start Cycling Effect
+                let cycleSpeed = 150; // ms
+                let lastAnimal = null;
+                
+                this.intervalId = setInterval(() => {
+                    let nextAnimal = ANIMAL_TYPES[Math.floor(Math.random() * ANIMAL_TYPES.length)];
+                    while(nextAnimal === lastAnimal) { // Don't repeat same instantly
+                        nextAnimal = ANIMAL_TYPES[Math.floor(Math.random() * ANIMAL_TYPES.length)];
+                    }
+                    this.scene3D.showAnimal(nextAnimal);
+                    lastAnimal = nextAnimal;
+                }, cycleSpeed);
+
+                // Set timer to STOP cycling
+                this.timeoutId = setTimeout(() => {
+                    clearInterval(this.intervalId); // Stop changing animals
+                    this.scene3D.stopRotating(); // Stop moving
+                    
+                    this.setState('WAITING_FOR_INPUT');
+                    this.startTime = performance.now();
+                }, delay);
+            }
+
+            handleInput(e) {
+                e.preventDefault(); // Prevent double firing on touch
+                
+                if (this.state === 'CYCLING') {
+                    this.triggerFalseStart();
+                } else if (this.state === 'WAITING_FOR_INPUT') {
+                    this.triggerSuccess();
+                }
+            }
+
+            triggerFalseStart() {
+                clearInterval(this.intervalId);
+                clearTimeout(this.timeoutId);
+                this.state = 'FINISHED';
+                
+                // UI Feedback
+                this.ui.badge.className = 'status-badge status-error';
+                this.ui.badge.innerText = 'Too Soon!';
+                this.ui.mainText.innerText = 'False Start';
+                this.ui.mainText.style.color = 'var(--accent-error)';
+                this.ui.subText.innerText = 'You clicked while the animals were still cycling.';
+                
+                this.scene3D.stopRotating();
+                this.ui.resetBtn.style.display = 'block';
+            }
+
+            triggerSuccess() {
+                this.endTime = performance.now();
+                const reactionTime = Math.round(this.endTime - this.startTime);
+                
+                // Save Data
+                this.results.push(reactionTime);
+                if (reactionTime < this.bestTime) this.bestTime = reactionTime;
+                
+                // UI Feedback
+                this.state = 'FINISHED';
+                this.ui.badge.className = 'status-badge status-result';
+                this.ui.badge.innerText = `${reactionTime} ms`;
+                
+                this.ui.mainText.innerHTML = `Captured!<span style="color:var(--accent-result)"> ${reactionTime}ms</span>`;
+                this.ui.mainText.style.color = 'var(--text-primary)';
+                
+                const currentAnimalName = this.scene3D.currentAnimal.type;
+                this.ui.subText.innerText = `You added a ${currentAnimalName} to your zoo.`;
+                
+                this.updateStats();
+                this.addToZoo(currentAnimalName, reactionTime);
+                this.ui.resetBtn.style.display = 'block';
+            }
+
+            addToZoo(type, time) {
+                // Clear "Empty" text if first item
+                if (this.results.length === 1) this.ui.zooGrid.innerHTML = '';
+
+                const el = document.createElement('div');
+                el.className = 'zoo-item new';
+                el.innerHTML = `<span title="${time}ms">${ICONS[type] || '🐾'}</span>`;
+                
+                // Add to start
+                this.ui.zooGrid.prepend(el);
+            }
+
+            updateStats() {
+                const count = this.results.length;
+                const avg = Math.round(this.results.reduce((a, b) => a + b, 0) / count);
+                
+                this.ui.statCount.innerText = count;
+                this.ui.statAvg.innerText = `${avg} ms`;
+                this.ui.statBest.innerText = `${this.bestTime} ms`;
+            }
+
+            resetRoutine() {
+                this.setState('IDLE');
+                this.ui.mainText.style.color = 'var(--text-primary)';
+                // Keep the current animal on screen but resume idle rotation
+                this.scene3D.resumeRotating();
+            }
+
+            resetSession() {
+                this.results = [];
+                this.bestTime = Infinity;
+                this.ui.statCount.innerText = '0';
+                this.ui.statAvg.innerText = '-- ms';
+                this.ui.statBest.innerText = '-- ms';
+                this.ui.zooGrid.innerHTML = '<div class="zoo-item" style="opacity: 0.3; font-size: 0.8rem;">Empty</div>';
+                this.resetRoutine();
+            }
+        }
+
+        // Initialize Game
+        const game = new GameEngine();
+
+    </script>
+</body>
+</html>
